@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MB Green Flow (NodeAI) | Mira-Bhayandar Traffic Engine</title>
+    <meta name="description" content="MB Green Flow: AI-powered real-time traffic monitoring, civic reporting, and smart mobility for Mira-Bhayandar.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        heading: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                        body: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'brand': {
+                            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+                            400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3',
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #020510;
+            --bg2: #03091a;
+            --surface: rgba(255,255,255,0.05);
+            --surface-hover: rgba(255,255,255,0.09);
+            --border: rgba(255,255,255,0.10);
+            --border-bright: rgba(255,255,255,0.20);
+
+            --neon-purple: #8b5cf6;
+            --neon-cyan: #22d3ee;
+            --neon-lime: #a3e635;
+            --neon-pink: #f472b6;
+            --neon-orange: #fb923c;
+            --neon-red: #f87171;
+            --neon-yellow: #fde047;
+            --neon-green: #4ade80;
+
+            --text: #f1f5f9;
+            --text-muted: #64748b;
+            --text-dim: #334155;
+
+            --radius: 4px;
+            --radius-lg: 8px;
+            --radius-xl: 12px;
+
+            --shadow-brutal: 4px 4px 0px rgba(0,0,0,0.8);
+            --shadow-brutal-purple: 4px 4px 0px rgba(139,92,246,0.5);
+            --shadow-brutal-cyan: 4px 4px 0px rgba(34,211,238,0.4);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── STARFIELD CANVAS ── */
+        #starfield {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── BACKGROUND NEBULA ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 10% 0%,   rgba(139,92,246,0.22) 0%, transparent 55%),
+                radial-gradient(ellipse 60% 50% at 90% 100%, rgba(34,211,238,0.16) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 40% at 50% 50%,  rgba(244,114,182,0.07) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 35% at 20% 80%,  rgba(59,130,246,0.14) 0%, transparent 50%),
+                radial-gradient(ellipse 35% 30% at 80% 20%,  rgba(74,222,128,0.08) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── SCANLINES TEXTURE ── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.03) 2px,
+                rgba(0,0,0,0.03) 4px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── MAP ── */
+        #map {
+            height: 520px;
+            width: 100%;
+            border-radius: 0;
+            z-index: 1;
+            border-top: 2px solid var(--border);
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: rgba(10,10,20,0.95);
+            backdrop-filter: blur(20px);
+            border: 2px solid var(--neon-purple);
+            border-radius: var(--radius-xl);
+            color: var(--text);
+            box-shadow: var(--shadow-brutal-purple);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .leaflet-popup-tip { background: rgba(10,10,20,0.95); }
+        .leaflet-popup-content { margin: 12px 16px; color: var(--text); }
+
+        /* ── GLASS CARD (base) ── */
+        .glass {
+            background: rgba(10, 12, 30, 0.60);
+            backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            -webkit-backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            border: 1.5px solid rgba(255,255,255,0.15);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        .glass-dark {
+            background: rgba(5, 6, 20, 0.72);
+            backdrop-filter: blur(40px) saturate(200%) brightness(1.05);
+            -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.05);
+            border: 1.5px solid rgba(255,255,255,0.13);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 40px rgba(0,0,0,0.5);
+        }
+
+        /* ── BRUT CARD ── */
+        .card {
+            background: rgba(12, 14, 36, 0.82);
+            backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            -webkit-backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            border: 2px solid rgba(255,255,255,0.18);
+            border-radius: var(--radius-xl);
+            box-shadow:
+                4px 4px 0 rgba(0,0,0,0.7),
+                inset 0 1px 0 rgba(255,255,255,0.10),
+                inset 0 0 30px rgba(139,92,246,0.04),
+                0 0 0 0 transparent;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.2), inset 0 1px 0 rgba(255,255,255,0.12);
+            border-color: rgba(139,92,246,0.6);
+        }
+
+        /* card colour cycling — vivid neon top border + left glow strip + inner tint */
+        .card:nth-child(6n+1) {
+            border-top: 2.5px solid rgba(139,92,246,0.95);
+            border-left: 2.5px solid rgba(139,92,246,0.45);
+            background: linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(139,92,246,0.25), inset 0 1px 0 rgba(139,92,246,0.25);
+        }
+        .card:nth-child(6n+2) {
+            border-top: 2.5px solid rgba(34,211,238,0.95);
+            border-left: 2.5px solid rgba(34,211,238,0.45);
+            background: linear-gradient(135deg, rgba(34,211,238,0.09) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(34,211,238,0.22), inset 0 1px 0 rgba(34,211,238,0.22);
+        }
+        .card:nth-child(6n+3) {
+            border-top: 2.5px solid rgba(74,222,128,0.95);
+            border-left: 2.5px solid rgba(74,222,128,0.45);
+            background: linear-gradient(135deg, rgba(74,222,128,0.09) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(74,222,128,0.22), inset 0 1px 0 rgba(74,222,128,0.22);
+        }
+        .card:nth-child(6n+4) {
+            border-top: 2.5px solid rgba(251,146,60,0.95);
+            border-left: 2.5px solid rgba(251,146,60,0.45);
+            background: linear-gradient(135deg, rgba(251,146,60,0.09) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(251,146,60,0.22), inset 0 1px 0 rgba(251,146,60,0.22);
+        }
+        .card:nth-child(6n+5) {
+            border-top: 2.5px solid rgba(244,114,182,0.95);
+            border-left: 2.5px solid rgba(244,114,182,0.45);
+            background: linear-gradient(135deg, rgba(244,114,182,0.09) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(244,114,182,0.22), inset 0 1px 0 rgba(244,114,182,0.22);
+        }
+        .card:nth-child(6n+6) {
+            border-top: 2.5px solid rgba(253,224,71,0.95);
+            border-left: 2.5px solid rgba(253,224,71,0.45);
+            background: linear-gradient(135deg, rgba(253,224,71,0.08) 0%, rgba(8,10,28,0.75) 40%);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.7), 0 0 35px rgba(253,224,71,0.22), inset 0 1px 0 rgba(253,224,71,0.22);
+        }
+
+        .card-flat {
+            background: rgba(12, 14, 36, 0.80);
+            backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            -webkit-backdrop-filter: blur(32px) saturate(180%) brightness(1.1);
+            border: 2px solid rgba(255,255,255,0.16);
+            border-radius: var(--radius-xl);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 24px rgba(139,92,246,0.03), 0 8px 32px rgba(0,0,0,0.45);
+        }
+
+        /* ── BRUT LEFT ACCENT ── */
+        .brut-accent {
+            border-left: 4px solid var(--neon-purple);
+        }
+        .brut-accent-cyan { border-left: 4px solid var(--neon-cyan); }
+        .brut-accent-red { border-left: 4px solid var(--neon-red); }
+        .brut-accent-green { border-left: 4px solid var(--neon-green); }
+        .brut-accent-orange { border-left: 4px solid var(--neon-orange); }
+        .brut-accent-pink { border-left: 4px solid var(--neon-pink); }
+        .brut-accent-yellow { border-left: 4px solid var(--neon-yellow); }
+
+        /* ── TABS ── */
+        .tab-content {
+            display: none;
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ── NAV ── */
+        .nav-pill {
+            position: relative;
+            transition: all 0.25s ease;
+            border-radius: var(--radius-lg);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        .nav-pill.active {
+            background: var(--neon-purple);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(139,92,246,0.5), 3px 3px 0 rgba(0,0,0,0.5);
+        }
+
+        .nav-pill:not(.active) {
+            color: var(--text-muted);
+            background: transparent;
+        }
+
+        .nav-pill:not(.active):hover {
+            background: var(--surface-hover);
+            color: var(--neon-cyan);
+            border-color: rgba(34,211,238,0.2);
+        }
+
+        /* ── BUTTONS ── */
+        .btn-primary {
+            background: var(--neon-purple);
+            color: white;
+            border: 2px solid rgba(139,92,246,0.8);
+            border-radius: var(--radius-lg);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 3px 3px 0 rgba(0,0,0,0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 11px;
+        }
+        .btn-primary:hover {
+            transform: translate(-1px, -1px);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.6);
+            background: #7c3aed;
+        }
+        .btn-primary:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 rgba(0,0,0,0.6); }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(60px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.5); }
+            50%       { box-shadow: 0 0 0 10px rgba(139,92,246,0); }
+        }
+        @keyframes shimmer {
+            0%   { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-8px); }
+        }
+        @keyframes progressFill {
+            from { width: 0; }
+        }
+        @keyframes typewriter {
+            from { width: 0; }
+            to   { width: 100%; }
+        }
+        @keyframes blink {
+            50% { border-color: transparent; }
+        }
+        @keyframes pulse-ring {
+            0%   { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(2.4); opacity: 0; }
+        }
+        @keyframes scanIn {
+            from { opacity: 0; transform: scaleY(0.95); filter: blur(4px); }
+            to   { opacity: 1; transform: scaleY(1);    filter: blur(0); }
+        }
+        @keyframes neonFlicker {
+            0%, 100% { opacity: 1; }
+            92%       { opacity: 1; }
+            93%       { opacity: 0.4; }
+            94%       { opacity: 1; }
+        }
+        @keyframes glitch-anim {
+            0%, 95% { transform: translate(0); }
+            96% { transform: translate(-2px, 1px); }
+            97% { transform: translate(2px, -1px); }
+            98% { transform: translate(-1px, 2px); }
+            99% { transform: translate(1px, -2px); }
+            100% { transform: translate(0); }
+        }
+        @keyframes glitch-anim-1 {
+            0%, 90% { clip-path: inset(0 0 0 0); transform: translate(0); }
+            91% { clip-path: inset(10% 0 80% 0); transform: translate(-2px, 0); }
+            93% { clip-path: inset(80% 0 10% 0); transform: translate(2px, 0); }
+            95%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+        }
+        @keyframes glitch-anim-2 {
+            0%, 90% { clip-path: inset(0 0 0 0); transform: translate(0); }
+            92% { clip-path: inset(70% 0 20% 0); transform: translate(2px, 0); }
+            94% { clip-path: inset(20% 0 70% 0); transform: translate(-2px, 0); }
+            96%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+        }
+
+        /* ── CYBERPUNK EFFECTS ── */
+        @keyframes glitch-aberration {
+            0%, 5% { text-shadow: none; transform: translate(0); }
+            6% { text-shadow: 3px 0 var(--neon-cyan), -3px 0 var(--neon-pink); transform: translate(-2px, 1px); }
+            7% { text-shadow: -3px 0 var(--neon-cyan), 2px 0 var(--neon-pink); transform: translate(2px, -1px); }
+            8% { text-shadow: 2px 0 var(--neon-cyan), -2px 0 var(--neon-pink); transform: translate(0); }
+            9%, 100% { text-shadow: none; transform: translate(0); }
+        }
+        .glitch-text {
+            animation: neonFlicker 4s infinite, glitch-aberration 5s infinite;
+        }
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9999;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            opacity: 0.15;
+        }
+        @keyframes edgeLightPulse {
+            0%   { 
+                box-shadow: 0 0 15px rgba(34,211,238,0.3), inset 0 0 5px rgba(34,211,238,0.2);
+                border-color: rgba(34,211,238,0.6);
+            }
+            50%  { 
+                box-shadow: 0 0 30px rgba(139,92,246,0.6), inset 0 0 15px rgba(139,92,246,0.4);
+                border-color: rgba(139,92,246,0.9);
+            }
+            100% { 
+                box-shadow: 0 0 15px rgba(34,211,238,0.3), inset 0 0 5px rgba(34,211,238,0.2);
+                border-color: rgba(34,211,238,0.6);
+            }
+        }
+        .neon-edge-modal {
+            position: relative;
+            overflow: hidden;
+            animation: slideDown 0.3s ease, edgeLightPulse 2.5s infinite ease-in-out;
+            background: var(--bg-card);
+            border: 2px solid transparent; 
+        }
+        .anim-fade { animation: fadeInUp 0.5s cubic-bezier(0.4,0,0.2,1) forwards; }
+        .anim-fade.d1 { animation-delay: 0.08s; opacity: 0; }
+        .anim-fade.d2 { animation-delay: 0.16s; opacity: 0; }
+        .anim-fade.d3 { animation-delay: 0.24s; opacity: 0; }
+        .anim-fade.d4 { animation-delay: 0.32s; opacity: 0; }
+        .anim-fade.d5 { animation-delay: 0.40s; opacity: 0; }
+        .float-anim   { animation: float 5s ease-in-out infinite; }
+
+        /* ── PROGRESS ── */
+        .progress-track {
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .progress-fill {
+            border-radius: 2px;
+            transition: width 1s cubic-bezier(0.4,0,0.2,1);
+            animation: progressFill 1s ease forwards;
+        }
+
+        /* ── GAUGE ── */
+        .gauge-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+        /* ── DEMAND CHIPS ── */
+        .chip-high   { background: rgba(248,113,113,0.12); color: #f87171; border: 1.5px solid rgba(248,113,113,0.35); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+        .chip-medium { background: rgba(251,146,60,0.12);  color: #fb923c; border: 1.5px solid rgba(251,146,60,0.35);  font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+        .chip-low    { background: rgba(74,222,128,0.12);  color: #4ade80; border: 1.5px solid rgba(74,222,128,0.35);  font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+
+        /* ── COLLAPSIBLE ── */
+        .collapse-body { max-height: 0; overflow: hidden; transition: max-height 0.5s cubic-bezier(0.4,0,0.2,1); }
+        .collapse-body.open { max-height: 700px; }
+
+        /* ── SCROLLBAR ── */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.4); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.7); }
+
+        /* ── MISC ── */
+        .text-gradient {
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-color: rgba(255,255,255,0.04);
+            border: 1.5px solid var(--border-bright);
+            color: var(--text);
+        }
+        select option { background: #0c0c18; color: #f1f5f9; }
+        select:focus { outline: none; border-color: var(--neon-purple); box-shadow: 0 0 0 2px rgba(139,92,246,0.2); }
+
+        input, textarea {
+            background: rgba(255,255,255,0.04) !important;
+            border: 1.5px solid var(--border-bright) !important;
+            color: var(--text) !important;
+        }
+        input::placeholder, textarea::placeholder { color: #475569; }
+        input:focus, textarea:focus {
+            outline: none !important;
+            border-color: var(--neon-purple) !important;
+            box-shadow: 0 0 0 2px rgba(139,92,246,0.2) !important;
+        }
+
+        /* ── SEVERITY BADGES ── */
+        .severity-critical { background: rgba(220,38,38,0.2);  color: #f87171; border: 1.5px solid rgba(248,113,113,0.4); }
+        .severity-high     { background: rgba(249,115,22,0.15); color: #fb923c; border: 1.5px solid rgba(251,146,60,0.4); }
+        .severity-medium   { background: rgba(234,179,8,0.15);  color: #fde047; border: 1.5px solid rgba(253,224,71,0.4); }
+        .severity-low      { background: rgba(34,197,94,0.12);  color: #4ade80; border: 1.5px solid rgba(74,222,128,0.4); }
+
+        /* ── PROJECT TIMELINE ── */
+        .project-timeline::before {
+            content: '';
+            position: absolute;
+            left: 20px; top: 0; bottom: 0; width: 2px;
+            background: linear-gradient(180deg, var(--neon-purple), var(--neon-cyan), var(--neon-purple));
+            opacity: 0.4;
+        }
+
+        /* ── AI PANEL ── */
+        .ai-panel {
+            background: rgba(8,8,18,0.92);
+            backdrop-filter: blur(28px);
+            border: 2px solid rgba(139,92,246,0.3);
+            box-shadow: 0 0 30px rgba(139,92,246,0.1);
+        }
+        .ai-typing {
+            overflow: hidden; white-space: nowrap;
+            animation: typewriter 1.5s steps(40, end) forwards;
+        }
+
+        /* ── REPORT TYPES ── */
+        .type-btn-new {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            padding: 12px 8px;
+            border: 2px solid var(--border-bright);
+            border-radius: var(--radius-lg);
+            font-size: 10px; font-weight: 700; text-align: center; cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--surface);
+            color: var(--text-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .type-btn-new:hover {
+            background: rgba(139,92,246,0.12);
+            border-color: rgba(139,92,246,0.5);
+            color: #c4b5fd;
+            transform: translate(-1px,-1px);
+            box-shadow: 2px 2px 0 rgba(139,92,246,0.3);
+        }
+        .type-btn-new.selected {
+            background: rgba(139,92,246,0.2);
+            border-color: var(--neon-purple);
+            color: #c4b5fd;
+            box-shadow: 3px 3px 0 rgba(139,92,246,0.4);
+        }
+
+        /* ── COLLAPSIBLE REPORT ── */
+        .report-detail {
+            max-height: 0; overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), padding 0.3s ease;
+            padding: 0 16px;
+        }
+        .report-detail.open { max-height: 500px; padding: 0 16px 16px 16px; }
+        .report-row { cursor: pointer; transition: background 0.2s ease; }
+        .report-row:hover { background: rgba(255,255,255,0.03); }
+        .report-row .expand-icon { transition: transform 0.3s ease; }
+        .report-row.expanded .expand-icon { transform: rotate(180deg); }
+
+        /* ── IMAGE PREVIEW ── */
+        .image-preview-container {
+            position: relative; border-radius: var(--radius-lg); overflow: hidden;
+            border: 2px solid var(--border-bright);
+        }
+        .image-preview-container img { width: 100%; height: 140px; object-fit: cover; border-radius: 6px; }
+        .image-preview-remove {
+            position: absolute; top: 8px; right: 8px;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+            border: none; border-radius: 50%; width: 28px; height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; cursor: pointer; transition: background 0.2s;
+        }
+        .image-preview-remove:hover { background: rgba(248,113,113,0.8); }
+
+        /* ── GREEN SLOT AREA CARDS ── */
+        .gs-area-card {
+            background: rgba(255,255,255,0.04);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            border: 1.5px solid var(--border);
+            transition: all 0.25s ease;
+        }
+        .gs-area-card:hover {
+            border-color: rgba(74,222,128,0.3);
+            background: rgba(74,222,128,0.04);
+            transform: translate(-2px,-2px);
+            box-shadow: 3px 3px 0 rgba(74,222,128,0.2);
+        }
+
+        /* ── LAYER BUTTONS ── */
+        .layer-btn {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 10px;
+            border-radius: var(--radius-lg);
+            border: 1.5px solid var(--border-bright);
+            background: var(--surface);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .layer-btn:hover {
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+            background: rgba(34,211,238,0.08);
+        }
+
+        /* ── CONSTRUCTION WARNING ── */
+        .construction-warning {
+            background: rgba(253,224,71,0.08);
+            border: 1.5px solid rgba(253,224,71,0.25);
+            border-radius: var(--radius-lg);
+        }
+
+        /* ── HEADER DIVIDER ── */
+        .header-rule {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-purple), var(--neon-cyan), transparent);
+            opacity: 0.4;
+        }
+
+        /* ── MONOSPACE DATA ── */
+        .data-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── STAT NUMBER ── */
+        .stat-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        /* ── SECTION LABEL ── */
+        .section-label {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* ── LIVE DOT ── */
+        .live-dot::before {
+            content: '';
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--neon-green);
+            margin-right: 6px;
+            animation: pulse-ring 1.5s cubic-bezier(0.4,0,0.6,1) infinite;
+        }
+
+        /* ── NEON GLOW TEXT ── */
+        .neon-text-purple { text-shadow: 0 0 20px rgba(139,92,246,0.6); }
+        .neon-text-cyan   { text-shadow: 0 0 20px rgba(34,211,238,0.6); }
+        .neon-text-green  { text-shadow: 0 0 20px rgba(74,222,128,0.5); }
+
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* ── HEADER GLOW BAR ── */
+        .header-glow {
+            position: relative;
+        }
+        .header-glow::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(139,92,246,0.6) 30%,
+                rgba(34,211,238,0.6) 70%,
+                transparent 100%
+            );
+        }
+
+        /* ── MODAL ── */
+        #report-modal-content {
+            background: rgba(10,10,22,0.98);
+            backdrop-filter: blur(30px);
+            border: 2px solid rgba(139,92,246,0.4);
+            box-shadow: 6px 6px 0 rgba(0,0,0,0.8), 0 0 40px rgba(139,92,246,0.15);
+            color: var(--text);
+        }
+
+        /* ── UPLOAD ZONE ── */
+        #upload-zone {
+            border: 2px dashed rgba(139,92,246,0.35) !important;
+            background: rgba(139,92,246,0.04) !important;
+            border-radius: var(--radius-lg) !important;
+            cursor: pointer;
+        }
+        #upload-zone:hover {
+            border-color: var(--neon-purple) !important;
+            background: rgba(139,92,246,0.08) !important;
+        }
+
+        /* ── TAG ── */
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        /* GLASS HERO panel */
+        .hero-panel {
+            background: rgba(8,5,25,0.55);
+            backdrop-filter: blur(48px) saturate(200%) brightness(1.08);
+            -webkit-backdrop-filter: blur(48px) saturate(200%) brightness(1.08);
+            border: 2px solid rgba(139,92,246,0.35);
+            border-radius: var(--radius-xl);
+            box-shadow:
+                6px 6px 0 rgba(0,0,0,0.75),
+                inset 0 1px 0 rgba(255,255,255,0.10),
+                inset 0 0 80px rgba(139,92,246,0.06),
+                0 0 80px rgba(139,92,246,0.12);
+        }
+
+        /* INSET DARK GLASS */
+        .inset-glass {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: var(--radius-lg);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        /* NAV WRAPPER */
+        #main-nav {
+            background: rgba(5,6,20,0.72);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 2px solid rgba(255,255,255,0.14);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        /* Aurora drift animation */
+        @keyframes aurora1 {
+            0%,100% { transform: translate(0,0) scale(1); opacity:0.18; }
+            33%      { transform: translate(80px,-40px) scale(1.15); opacity:0.28; }
+            66%      { transform: translate(-60px,30px) scale(0.92); opacity:0.14; }
+        }
+        @keyframes aurora2 {
+            0%,100% { transform: translate(0,0) scale(1); opacity:0.12; }
+            40%      { transform: translate(-100px,50px) scale(1.2); opacity:0.22; }
+            70%      { transform: translate(70px,-30px) scale(0.88); opacity:0.10; }
+        }
+        .aurora-blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .aurora-1 {
+            width: 600px; height: 400px;
+            top: -100px; left: -100px;
+            background: radial-gradient(ellipse, rgba(139,92,246,0.35), transparent 70%);
+            animation: aurora1 18s ease-in-out infinite;
+        }
+        .aurora-2 {
+            width: 500px; height: 350px;
+            bottom: -80px; right: -80px;
+            background: radial-gradient(ellipse, rgba(34,211,238,0.28), transparent 70%);
+            animation: aurora2 22s ease-in-out infinite;
+        }
+        .aurora-3 {
+            width: 400px; height: 300px;
+            top: 40%; left: 40%;
+            background: radial-gradient(ellipse, rgba(244,114,182,0.18), transparent 70%);
+            animation: aurora1 28s ease-in-out infinite reverse;
+        }
+
+        /* ── METRO CHECKBOX ── */
+        #metro-mode-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        #metro-mode-checkbox::after {
+            content: '';
+            display: block;
+            width: 100%; height: 100%;
+            border-radius: 4px;
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+        #metro-mode-checkbox:checked {
+            background: rgba(56,189,248,0.25) !important;
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 12px rgba(56,189,248,0.55) !important;
+        }
+        #metro-mode-checkbox:checked::after {
+            content: '';
+            position: absolute;
+            top: 3px; left: 6px;
+            width: 6px; height: 10px;
+            border: 2px solid #38bdf8;
+            border-top: none; border-left: none;
+            transform: rotate(45deg);
+        }
+        /* Smart Commute planner pulse badge */
+        @keyframes softPulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.7; transform: scale(1.04); }
+        }
+        .crowd-pulse { animation: softPulse 2.2s ease-in-out infinite; }
+
+        /* Mobile header shimmer rainbow bar */
+        @keyframes shimmerBar {
+            0%   { background-position: 0% 0%; }
+            100% { background-position: 200% 0%; }
+        }
+
+        /* FAB pill button floating bob */
+        @keyframes fabBob {
+            0%, 100% { transform: translateY(0px); }
+            50%       { transform: translateY(-4px); }
+        }
+        #mobile-report-fab {
+            animation: fabBob 3s ease-in-out infinite;
+        }
+        #mobile-report-fab:active {
+            animation: none;
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+
+<body class="antialiased min-h-screen relative">
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="aurora-blob aurora-1" aria-hidden="true"></div>
+<div class="aurora-blob aurora-2" aria-hidden="true"></div>
+<div class="aurora-blob aurora-3" aria-hidden="true"></div>
+
+<div id="app-root" style="position:relative;z-index:10;isolation:isolate;">
+
+    <!-- ═══════════════════════════════
+         HEADER
+    ═══════════════════════════════ -->
+    <header class="header-glow sticky top-0 z-50"
+        style="background:rgba(5,5,10,0.92); backdrop-filter:blur(28px); border-bottom: 2px solid rgba(139,92,246,0.3);"
+    >
+        <!-- Mobile-only glowing top edge -->
+        <div class="md:hidden absolute top-0 left-0 right-0 h-[2px]"
+            style="background: linear-gradient(90deg, var(--neon-purple), var(--neon-cyan), var(--neon-green), var(--neon-pink), var(--neon-purple)); background-size: 200% 100%; animation: shimmerBar 3s linear infinite;"
+        ></div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[60px] flex items-center justify-between">
+
+            <!-- LOGO -->
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <div class="bg-gradient-to-br from-violet-600 to-purple-700 text-white p-2 rounded-[8px] shadow-lg"
+                        style="box-shadow:3px 3px 0 rgba(0,0,0,0.6),0 0 20px rgba(139,92,246,0.4); animation:pulseGlow 3s infinite;">
+                        <i data-lucide="navigation-2" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-xl font-heading font-black tracking-tight leading-tight glitch-text float-anim" data-text="MB Green Flow (NodeAI)" style="color:#f1f5f9; display: inline-block;">
+                        MB <span style="color:var(--neon-green);">Green</span> Flow <span style="color:var(--neon-purple);font-size:13px;">(NodeAI)</span>
+                    </h1>
+                    <p class="section-label hidden sm:block" style="font-size:8px;">Smart Mobility &amp; Traffic Intelligence</p>
+                </div>
+            </div>
+
+            <!-- RIGHT -->
+            <div class="flex items-center gap-2.5">
+                <!-- Desktop: LIVE badge -->
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[6px] inset-glass">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background:var(--neon-green);"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2" style="background:var(--neon-green);"></span>
+                    </span>
+                    <span class="section-label" style="color:var(--neon-green);">LIVE</span>
+                </div>
+
+                <!-- Mobile LIVE indicator (small dot only) -->
+                <div class="md:hidden flex items-center gap-1.5 px-2 py-1 rounded-full" style="background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.3);">
+                    <span class="relative flex h-1.5 w-1.5">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background:var(--neon-green);"></span>
+                        <span class="relative inline-flex rounded-full h-1.5 w-1.5" style="background:var(--neon-green);"></span>
+                    </span>
+                    <span class="text-[9px] font-bold" style="color:var(--neon-green);">LIVE</span>
+                </div>
+
+                <!-- Desktop: Report Issue button -->
+                <button onclick="Navigation.openReportModal()"
+                    class="hidden md:flex btn-primary items-center gap-2 px-4 py-2">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>Report Issue</span>
+                </button>
+
+                <!-- Mobile: Three dots menu -->
+                <button onclick="Navigation.toggleMobileMenu()"
+                    class="md:hidden flex items-center justify-center w-9 h-9 rounded-[8px] text-white transition-colors"
+                    style="background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(34,211,238,0.15)); border: 1px solid rgba(139,92,246,0.4); box-shadow: 0 0 12px rgba(139,92,246,0.2);">
+                    <i data-lucide="more-vertical" class="w-4 h-4" style="color:var(--neon-purple);"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════════════
+         MAIN LAYOUT (SIDEBAR + CONTENT)
+    ═══════════════════════════════ -->
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 relative z-10 flex flex-col md:flex-row gap-6 items-start">
+
+        <!-- ═══════════════════════════════
+             SIDEBAR NAV (Command Center Drawer on Mobile)
+        ═══════════════════════════════ -->
+        <!-- Mobile Overlay -->
+        <div id="mobile-nav-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] hidden md:hidden" onclick="Navigation.toggleMobileMenu()"></div>
+        
+        <nav class="fixed md:relative inset-y-0 left-0 z-[100] md:z-auto w-[260px] md:w-[240px] transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col gap-2 p-4 md:p-2 shrink-0 md:sticky top-0 md:top-[80px] h-full md:h-auto overflow-y-auto backdrop-blur-xl md:backdrop-blur-none bg-[#050614] md:bg-white/5" id="main-nav" style="border-right:1px solid rgba(255,255,255,0.05);">
+            
+            <!-- Mobile Drawer Header -->
+            <div class="flex items-center justify-between md:hidden mb-6 px-2">
+                <span class="font-heading font-black text-white tracking-wider text-sm">COMMAND CENTER</span>
+                <button onclick="Navigation.toggleMobileMenu()" class="text-slate-400 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Desktop Command Center label -->
+            <div class="hidden md:block px-4 pb-2 mb-2" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <div class="section-label" style="color:var(--neon-purple);">Command Center</div>
+            </div>
+
+            <button onclick="Navigation.switchTab('dashboard'); Navigation.closeMobileMenu();" id="nav-dashboard"
+                class="nav-pill active w-full flex items-center justify-start gap-4 px-4 py-3 whitespace-nowrap">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+            </button>
+            <button onclick="Navigation.switchTab('map'); Navigation.closeMobileMenu();" id="nav-map"
+                class="nav-pill w-full flex items-center justify-start gap-4 px-4 py-3 whitespace-nowrap">
+                <i data-lucide="map" class="w-4 h-4"></i> Live Map
+            </button>
+            <button onclick="Navigation.switchTab('reports'); Navigation.closeMobileMenu();" id="nav-reports"
+                class="nav-pill w-full flex items-center justify-start gap-4 px-4 py-3 whitespace-nowrap">
+                <i data-lucide="file-text" class="w-4 h-4"></i> Reports
+            </button>
+            <button onclick="Navigation.switchTab('rickshaw'); Navigation.closeMobileMenu();" id="nav-rickshaw"
+                class="nav-pill w-full flex items-center justify-start gap-4 px-4 py-3 whitespace-nowrap">
+                <i data-lucide="bus" class="w-4 h-4"></i> Mobility
+            </button>
+        </nav>
+
+        <!-- ═══════════════════════════════
+             CONTENT
+        ═══════════════════════════════ -->
+        <main class="flex-1 w-full min-w-0 relative">
+
+        <!-- ════════════════════════════
+             DASHBOARD TAB
+        ════════════════════════════ -->
+        <div id="view-dashboard" class="tab-content active space-y-6">
+
+            <!-- Green Slot Predictor HERO -->
+            <div class="hero-panel p-6 md:p-8 text-white relative overflow-hidden anim-fade">
+                <!-- BG Orbs -->
+                <div class="absolute -top-24 -right-24 w-72 h-72 rounded-full opacity-[0.15] blur-[100px]" style="background:var(--neon-purple);"></div>
+                <div class="absolute -bottom-20 -left-20 w-56 h-56 rounded-full opacity-[0.10] blur-[80px]" style="background:var(--neon-cyan);"></div>
+
+                <!-- Brutalist corner tag -->
+                <div class="absolute top-4 right-4 float-anim">
+                    <div class="tag" style="background:rgba(74,222,128,0.12);color:var(--neon-green);border:1.5px solid rgba(74,222,128,0.3);">
+                        <span class="animate-ping inline-flex h-1.5 w-1.5 rounded-full" style="background:var(--neon-green);opacity:0.8;"></span>
+                        REAL-TIME
+                    </div>
+                </div>
+
+                <!-- Header row -->
+                <div class="flex items-start justify-between mb-6 relative z-10">
+                    <div class="flex items-center gap-4">
+                        <div class="p-3 rounded-[8px]" style="background:rgba(74,222,128,0.1);border:2px solid rgba(74,222,128,0.3);box-shadow:3px 3px 0 rgba(0,0,0,0.5);">
+                            <i data-lucide="zap" class="w-5 h-5" style="color:var(--neon-green);"></i>
+                        </div>
+                        <div>
+                            <div class="section-label mb-1" style="color:rgba(74,222,128,0.7);">AI SYSTEM</div>
+                            <h2 class="text-lg md:text-xl font-heading font-black tracking-tight" style="letter-spacing:-0.01em;">Green Slot Predictor</h2>
+                            <p class="text-xs mt-0.5" style="color:#64748b;">AI-powered real-time traffic intelligence</p>
+                        </div>
+                    </div>
+                    <div class="text-right hidden sm:block relative z-10">
+                        <div class="stat-num text-2xl neon-text-green" id="gs-live-clock" style="color:var(--neon-green);">--:--:--</div>
+                        <div class="section-label mt-0.5" id="gs-live-date">Loading...</div>
+                    </div>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 relative z-10" id="green-slot-container"></div>
+            </div>
+
+            <!-- AI City Insights -->
+            <div class="space-y-4 anim-fade d2">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 rounded-[8px]" style="background:rgba(139,92,246,0.12);border:2px solid rgba(139,92,246,0.3);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                        <i data-lucide="brain" class="w-5 h-5" style="color:var(--neon-purple);"></i>
+                    </div>
+                    <div>
+                        <div class="section-label mb-0.5">Intelligence</div>
+                        <h3 class="text-lg font-heading font-black text-white tracking-tight">AI City Insights</h3>
+                    </div>
+                </div>
+                <div id="ai-insights-container"></div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════
+             LIVE MAP TAB
+        ════════════════════════════ -->
+        <div id="view-map" class="tab-content space-y-4">
+
+            <!-- Directions Panel -->
+            <div class="card-flat overflow-hidden">
+                <div class="p-4" style="border-bottom:1px solid var(--border);">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-[8px]" style="background:rgba(34,211,238,0.1);border:2px solid rgba(34,211,238,0.25);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                            <i data-lucide="route" class="w-4 h-4" style="color:var(--neon-cyan);"></i>
+                        </div>
+                        <div>
+                            <div class="section-label mb-0.5">Navigation</div>
+                            <h4 class="font-heading font-bold text-white text-sm">Get Directions</h4>
+                        </div>
+                    </div>
+                    <div class="grid sm:grid-cols-2 gap-2 mb-2">
+                        <div>
+                            <label class="block section-label mb-1.5">From</label>
+                            <select id="dir-from" onchange="MapEnhanced.getDirections()"
+                                class="w-full rounded-[8px] text-[12px] py-3 md:py-2.5 px-3 font-medium pr-8"></select>
+                        </div>
+                        <div>
+                            <label class="block section-label mb-1.5">To</label>
+                            <select id="dir-to" onchange="MapEnhanced.getDirections()"
+                                class="w-full rounded-[8px] text-[12px] py-3 md:py-2.5 px-3 font-medium pr-8"></select>
+                        </div>
+                    </div>
+                    <div id="dir-result"></div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="card-flat overflow-hidden">
+                <div class="p-4 flex flex-wrap justify-between items-center gap-3" style="border-bottom:1px solid var(--border);">
+                    <div>
+                        <h3 class="font-heading font-black text-white text-sm flex items-center gap-2 uppercase tracking-wide">
+                            <span class="w-2 h-2 rounded-full animate-pulse" style="background:var(--neon-green);box-shadow:0 0 6px var(--neon-green);"></span>
+                            Live Traffic Map
+                        </h3>
+                        <p class="text-[11px] mt-0.5" style="color:#475569;">Mira-Bhayandar · <span id="map-timestamp" style="color:var(--neon-cyan);">Updated just now</span></p>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <button onclick="MapLogic.toggleLayer('traffic')" id="btn-layer-traffic"
+                            class="layer-btn px-3 py-1.5 flex items-center gap-1.5" style="border-color:rgba(139,92,246,0.5);color:var(--neon-purple);background:rgba(139,92,246,0.1);">
+                            <i data-lucide="car-front" class="w-3 h-3"></i> Traffic
+                        </button>
+                        <button onclick="MapLogic.toggleLayer('reports')" id="btn-layer-reports"
+                            class="layer-btn px-3 py-1.5 flex items-center gap-1.5">
+                            <i data-lucide="file-text" class="w-3 h-3"></i> Reports
+                        </button>
+
+                    </div>
+                </div>
+                <div id="map"></div>
+            </div>
+
+            <!-- Live Saturation -->
+            <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 rounded-[8px]" style="background:rgba(34,211,238,0.1);border:2px solid rgba(34,211,238,0.25);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                        <i data-lucide="gauge" class="w-5 h-5" style="color:var(--neon-cyan);"></i>
+                    </div>
+                    <div>
+                        <div class="section-label mb-0.5">Zones</div>
+                        <h3 class="text-lg font-heading font-black text-white">Live Saturation</h3>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="saturation-container"></div>
+            </div>
+
+            <!-- Legend -->
+            <div class="card-flat p-4">
+                <div class="section-label mb-3">Legend</div>
+                <div class="flex flex-wrap gap-x-5 gap-y-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded-[3px]" style="background:rgba(248,113,113,0.2);border:2px solid #f87171;"></span>
+                        <span class="text-[11px] font-medium" style="color:#94a3b8;">Heavy (&gt;70%)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded-[3px]" style="background:rgba(251,146,60,0.2);border:2px solid #fb923c;"></span>
+                        <span class="text-[11px] font-medium" style="color:#94a3b8;">Moderate (40–70%)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded-[3px]" style="background:rgba(74,222,128,0.15);border:2px solid #4ade80;"></span>
+                        <span class="text-[11px] font-medium" style="color:#94a3b8;">Clear (&lt;40%)</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background:var(--neon-cyan);box-shadow:0 0 6px var(--neon-cyan);"></span>
+                        <span class="text-[11px] font-medium" style="color:#94a3b8;">Civic Report</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════
+             REPORTS TAB
+        ════════════════════════════ -->
+        <div id="view-reports" class="tab-content space-y-6">
+
+            <!-- City Problem Summary HERO -->
+            <div class="anim-fade">
+                <div class="hero-panel p-6 md:p-8 text-white relative overflow-hidden"
+                    style="border-color:rgba(248,113,113,0.2);">
+                    <div class="absolute -top-24 -right-24 w-72 h-72 rounded-full opacity-[0.12] blur-[100px]" style="background:#ef4444;"></div>
+                    <div class="absolute -bottom-20 -left-20 w-56 h-56 rounded-full opacity-[0.08] blur-[80px]" style="background:#f97316;"></div>
+
+                    <div class="flex items-center gap-3 mb-2 relative z-10">
+                        <div class="p-2.5 rounded-[8px]" style="background:rgba(248,113,113,0.1);border:2px solid rgba(248,113,113,0.3);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                            <i data-lucide="trending-down" class="w-5 h-5" style="color:var(--neon-red);"></i>
+                        </div>
+                        <div>
+                            <div class="section-label mb-0.5" style="color:rgba(248,113,113,0.7);">Crisis Report</div>
+                            <h2 class="text-xl font-heading font-black tracking-tight" id="summary-headline">The Congestion Burden</h2>
+                            <p class="text-xs mt-0.5" style="color:#64748b;" id="summary-subtitle">Market nodes & commercial spines are choked</p>
+                        </div>
+                    </div>
+
+                    <!-- Cost Stats -->
+                    <div class="flex flex-wrap gap-3 mt-5 mb-6 relative z-10">
+                        <div class="inset-glass flex-1 min-w-[110px] text-center p-4" style="border-left:3px solid var(--neon-red);">
+                            <p class="stat-num text-3xl" style="color:var(--neon-red);" id="total-cost-stat">₹117 Cr</p>
+                            <p class="section-label mt-1.5">Annual Cost to City</p>
+                        </div>
+                        <div class="inset-glass flex-1 min-w-[110px] text-center p-4" style="border-left:3px solid var(--neon-yellow);">
+                            <p class="stat-num text-3xl" style="color:var(--neon-yellow);" id="commuters-stat">2.5 Lakh+</p>
+                            <p class="section-label mt-1.5">Affected Commuters</p>
+                        </div>
+                        <div class="inset-glass flex-1 min-w-[110px] text-center p-4" style="border-left:3px solid var(--neon-orange);">
+                            <p class="stat-num text-3xl" style="color:var(--neon-orange);" id="delay-stat">42 min</p>
+                            <p class="section-label mt-1.5">Avg. Delay / Day</p>
+                        </div>
+                    </div>
+
+                    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 relative z-10" id="city-problems-container"></div>
+                </div>
+            </div>
+
+            <!-- Live Today Announcement: Metro Line 9 -->
+            <div class="anim-fade mb-6">
+                <div class="hero-panel p-5 text-white relative overflow-hidden" style="border-color:rgba(74,222,128,0.3); border-width: 2px;">
+                    <div class="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-[0.1] blur-[60px]" style="background:var(--neon-green);"></div>
+                    <div class="absolute top-4 right-4 float-anim hidden sm:block">
+                        <div class="tag" style="background:rgba(74,222,128,0.12);color:var(--neon-green);border:1.5px solid rgba(74,222,128,0.3);">
+                            <span class="animate-ping inline-flex h-1.5 w-1.5 rounded-full" style="background:var(--neon-green);opacity:0.8;"></span>
+                            LIVE TODAY
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3 mb-4 relative z-10">
+                        <div class="p-2.5 rounded-[8px]" style="background:rgba(74,222,128,0.1);border:2px solid rgba(74,222,128,0.3);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                            <i data-lucide="train-front" class="w-5 h-5" style="color:var(--neon-green);"></i>
+                        </div>
+                        <div>
+                            <div class="section-label mb-0.5" style="color:var(--neon-green);">Major Milestone</div>
+                            <h3 class="text-lg font-heading font-black text-white tracking-tight">Metro Line 9 is Operational!</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="grid sm:grid-cols-2 gap-4 relative z-10">
+                        <div>
+                            <p class="text-sm mb-3" style="color:#e2e8f0; line-height: 1.5;">
+                                The highly anticipated <span style="color:var(--neon-red); font-weight:bold;">Red Line 9</span> extension connecting Dahisar to Mira-Bhayandar has officially started service today.
+                            </p>
+                            <ul class="text-[12px] space-y-2" style="color:#cbd5e1;">
+                                <li><strong style="color:var(--neon-purple);">Route:</strong> Dahisar East ↔ Subhash Chandra Bose Ground (Mira-Bhayandar)</li>
+                                <li><strong style="color:var(--neon-purple);">Timing:</strong> 6:00 AM to 10:00 PM Daily</li>
+                                <li><strong style="color:var(--neon-purple);">Key Stations:</strong> Dahisar East, Pandurang Wadi, Miragaon, Kashigaon, Sai Baba Nagar, Meditiya Nagar</li>
+                            </ul>
+                        </div>
+                        <div class="p-4 rounded-[8px] flex flex-col gap-3" style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.05); box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="brain" class="w-4 h-4" style="color:var(--neon-cyan);"></i>
+                                <span class="text-xs font-bold font-heading text-white tracking-wider">AI FLOW OVERVIEW</span>
+                            </div>
+                            <p class="text-[11px] leading-relaxed" style="color:#94a3b8;">
+                                Our predictive models indicate a <span style="color:var(--neon-green);">25-30% reduction</span> in road congestion along the Western Express Highway and Mira-Bhayandar road during peak hours starting today.
+                            </p>
+                            <div class="mt-auto flex items-start gap-2.5 p-2.5 rounded-[6px]" style="background:rgba(251,146,60,0.1); border:1px solid rgba(251,146,60,0.2);">
+                                <i data-lucide="lightbulb" class="w-4 h-4 mt-0.5 shrink-0" style="color:var(--neon-orange);"></i>
+                                <p class="text-[10px] text-orange-200 leading-relaxed"><strong>Smart Tip:</strong> Ditch the car today! Use Metro Line 9 to bypass WEH traffic and cut your travel time in half.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upcoming Projects -->
+            <div class="anim-fade d1">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2.5 rounded-[8px]" style="background:rgba(34,211,238,0.1);border:2px solid rgba(34,211,238,0.25);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                        <i data-lucide="hard-hat" class="w-5 h-5" style="color:var(--neon-cyan);"></i>
+                    </div>
+                    <div>
+                        <div class="section-label mb-0.5">Infrastructure</div>
+                        <h2 class="text-lg font-heading font-black text-white">Upcoming Projects</h2>
+                    </div>
+                </div>
+
+                <!-- Govt milestones -->
+                <div class="hero-panel p-5 text-white relative overflow-hidden mb-4" style="border-color:rgba(34,211,238,0.2);">
+                    <div class="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-[0.08] blur-[60px]" style="background:var(--neon-cyan);"></div>
+                    <div class="flex items-center gap-2 mb-2 relative z-10">
+                        <i data-lucide="badge-check" class="w-5 h-5" style="color:var(--neon-green);"></i>
+                        <h3 class="font-heading font-black text-sm uppercase tracking-wide" id="govt-headline">Approved & Underway</h3>
+                    </div>
+                    <p class="text-xs mb-4 relative z-10" style="color:#64748b;" id="govt-subtitle">Maharashtra Government & MMRDA driving both systems.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 relative z-10" id="govt-milestones-container"></div>
+                    <p class="text-xs mt-4 italic relative z-10" style="color:#475569;" id="govt-summary"></p>
+                </div>
+
+                <div class="space-y-4" id="projects-container"></div>
+            </div>
+
+            <!-- Community Reports -->
+            <div class="anim-fade d2">
+                <div class="card-flat overflow-hidden">
+                    <div class="p-5 flex items-center justify-between" style="border-bottom:1px solid var(--border);">
+                        <div>
+                            <div class="section-label mb-0.5">Citizens</div>
+                            <h2 class="text-lg font-heading font-black text-white">Community Reports</h2>
+                        </div>
+                        <button onclick="Navigation.openReportModal()"
+                            class="btn-primary flex items-center gap-2 px-3.5 py-2">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> New Report
+                        </button>
+                    </div>
+                    <div class="divide-y" style="--tw-divide-color:var(--border);" id="reports-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════
+             MOBILITY TAB
+        ════════════════════════════ -->
+        <div id="view-rickshaw" class="tab-content space-y-5">
+
+            <!-- Header -->
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 rounded-[8px]" style="background:rgba(74,222,128,0.1);border:2px solid rgba(74,222,128,0.3);box-shadow:2px 2px 0 rgba(0,0,0,0.5);">
+                    <i data-lucide="bus" class="w-5 h-5" style="color:var(--neon-green);"></i>
+                </div>
+                <div>
+                    <div class="section-label mb-0.5">Public Transport</div>
+                    <h2 class="text-lg font-heading font-black text-white">Mobility Hub</h2>
+                </div>
+                <div class="ml-auto px-3 py-1 rounded-[6px] inset-glass text-[10px] font-bold" style="color:var(--neon-green);">
+                    <i data-lucide="wifi" class="w-3 h-3 inline mr-1"></i>LIVE
+                </div>
+            </div>
+
+            <!-- Multi-Mode Fare Estimator (full width) -->
+            <div class="card-flat overflow-hidden">
+                <div class="p-5" style="border-bottom:1px solid var(--border);">
+                    <h3 class="font-heading font-black text-white text-sm flex items-center gap-2 uppercase tracking-wide">
+                        <i data-lucide="indian-rupee" class="w-4 h-4" style="color:var(--neon-purple);"></i> Multi-Mode Fare Estimator
+                    </h3>
+                    <p class="text-xs mt-0.5" style="color:#475569;">Compare fares across all transport modes for any route</p>
+                </div>
+                <div class="p-5 space-y-4">
+                    <!-- From / To -->
+                    <div class="grid sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block section-label mb-1.5">Pickup Location</label>
+                            <select id="fare-from" onchange="RickshawLogic.updateFare()"
+                                class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium pr-8"></select>
+                        </div>
+                        <div>
+                            <label class="block section-label mb-1.5">Drop-off Location</label>
+                            <select id="fare-to" onchange="RickshawLogic.updateFare()"
+                                class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium pr-8"></select>
+                        </div>
+                    </div>
+
+                    <!-- Metro Line 9 Checkbox Toggle -->
+                    <div class="rounded-[10px] overflow-hidden" id="metro-outer-box" style="border: 2px solid rgba(56,189,248,0.35); background: rgba(56,189,248,0.04);">
+                        <!-- Metro Header — clicking anywhere toggles checkbox -->
+                        <label for="metro-mode-checkbox"
+                            id="metro-toggle-label"
+                            class="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+                            style="border-bottom: 1px solid transparent; transition: border-color 0.3s;">
+                            <!-- Metro Icon -->
+                            <div class="w-9 h-9 rounded-[8px] flex items-center justify-center flex-shrink-0"
+                                style="background: rgba(56,189,248,0.15); border: 2px solid rgba(56,189,248,0.4); box-shadow: 0 0 14px rgba(56,189,248,0.25);">
+                                <i data-lucide="train-front" class="w-4 h-4" style="color:#38bdf8;"></i>
+                            </div>
+                            <!-- Label Text -->
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-heading font-black text-[13px]" style="color:#e0f2fe;">Metro Line 9</span>
+                                    <span class="tag" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1.5px solid rgba(74,222,128,0.3);font-size:8px;">OPERATIONAL</span>
+                                </div>
+                                <p class="text-[10px] mt-0.5" style="color:#64748b;">Click to plan your Metro journey · 6 Stations</p>
+                            </div>
+                            <!-- Neon Checkbox -->
+                            <input type="checkbox" id="metro-mode-checkbox"
+                                onchange="RickshawLogic.toggleMetroMode()"
+                                style="
+                                    appearance: none;
+                                    -webkit-appearance: none;
+                                    width: 20px; height: 20px;
+                                    border-radius: 5px;
+                                    border: 2px solid rgba(56,189,248,0.5);
+                                    background: rgba(255,255,255,0.05);
+                                    cursor: pointer;
+                                    position: relative;
+                                    flex-shrink: 0;
+                                    transition: all 0.2s ease;
+                                    box-shadow: 0 0 0 0 rgba(56,189,248,0);
+                                "
+                                onmouseover="this.style.borderColor='rgba(56,189,248,0.9)';this.style.boxShadow='0 0 8px rgba(56,189,248,0.35)';"
+                                onmouseout="this.style.boxShadow=this.checked?'0 0 10px rgba(56,189,248,0.5)':'0 0 0 0 rgba(56,189,248,0)';">
+                        </label>
+
+                        <!-- Metro Expanded Panel (hidden by default) -->
+                        <div id="metro-panel" style="max-height:0; overflow:hidden; transition: max-height 0.45s cubic-bezier(0.4,0,0.2,1);">
+                            <div class="px-4 pb-4 pt-3 space-y-3"
+                                style="border-top: 1px solid rgba(56,189,248,0.2); background: rgba(56,189,248,0.04);">
+                                <!-- Station description -->
+                                <div class="flex items-start gap-2 p-2.5 rounded-[8px]"
+                                    style="background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2);">
+                                    <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style="color:#38bdf8;"></i>
+                                    <p class="text-[10px] leading-relaxed" style="color:#94a3b8;">
+                                        Select two Metro Line 9 stations to see fare and compare with other modes on the same corridor.
+                                    </p>
+                                </div>
+                                <!-- Metro station selectors -->
+                                <div class="grid sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block section-label mb-1.5" style="color: rgba(56,189,248,0.8);">
+                                            <i data-lucide="map-pin" class="w-3 h-3 inline mr-1"></i>Board At Station
+                                        </label>
+                                        <select id="metro-from"
+                                            onchange="RickshawLogic.updateMetroFare()"
+                                            class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium pr-8"
+                                            style="border-color: rgba(56,189,248,0.4) !important;"></select>
+                                    </div>
+                                    <div>
+                                        <label class="block section-label mb-1.5" style="color: rgba(56,189,248,0.8);">
+                                            <i data-lucide="map-pin" class="w-3 h-3 inline mr-1"></i>Alight At Station
+                                        </label>
+                                        <select id="metro-to"
+                                            onchange="RickshawLogic.updateMetroFare()"
+                                            class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium pr-8"
+                                            style="border-color: rgba(56,189,248,0.4) !important;"></select>
+                                    </div>
+                                </div>
+                                <!-- Metro Fare Result -->
+                                <div id="metro-fare-result"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- General Results -->
+                    <div id="fare-result" class="hidden"></div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ═══════════════════════════════
+         MOBILE FLOATING ACTION BUTTON
+    ═══════════════════════════════ -->
+    <!-- Mobile Floating Report Button (pill shaped) -->
+    <button onclick="Navigation.openReportModal()"
+        id="mobile-report-fab"
+        class="md:hidden fixed bottom-6 right-4 z-[89] flex items-center gap-2.5 px-5 py-3.5 rounded-full text-white font-heading font-black text-[13px] tracking-wide transition-all active:scale-95"
+        style="
+            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 60%, #f59e0b 100%);
+            box-shadow: 0 4px 24px rgba(139,92,246,0.55), 0 0 0 1.5px rgba(255,255,255,0.12);
+            letter-spacing: 0.04em;
+        ">
+        <i data-lucide="camera" class="w-4 h-4 flex-shrink-0"></i>
+        <span>Report Issue</span>
+    </button>
+
+    <!-- ═══════════════════════════════
+    <!-- REPORT MODAL -->
+    <div id="report-modal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+        <div class="fixed inset-0 backdrop-blur-md" style="background:rgba(0,0,0,0.78);" onclick="Navigation.closeReportModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto overscroll-contain" style="padding-top:70px;">
+            <div class="flex min-h-full items-end sm:items-start justify-center sm:p-4">
+                <div id="report-modal-content" class="relative w-full sm:max-w-lg sm:rounded-[16px] rounded-t-[20px] overflow-hidden"
+                    style="background:rgba(8,10,28,0.98); border:1.5px solid rgba(139,92,246,0.4); box-shadow:0 -4px 40px rgba(139,92,246,0.3),0 0 0 1px rgba(255,255,255,0.05); animation:slideDown 0.32s cubic-bezier(0.34,1.56,0.64,1);">
+                    <!-- Drag handle -->
+                    <div class="sm:hidden flex justify-center pt-3 pb-1"><div class="w-10 h-1 rounded-full" style="background:rgba(255,255,255,0.2);"></div></div>
+                    <!-- Header -->
+                    <div class="flex items-center gap-3 px-5 pt-4 pb-4" style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                        <div class="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0" style="background:rgba(139,92,246,0.15);border:2px solid rgba(139,92,246,0.4);box-shadow:0 0 16px rgba(139,92,246,0.3);">
+                            <i data-lucide="camera" class="w-5 h-5" style="color:var(--neon-purple);"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 id="report-modal-title" class="text-base font-heading font-black text-white uppercase tracking-wide">Report an Issue</h3>
+                            <p class="text-[11px] mt-0.5" style="color:#64748b;">Help keep Mira-Bhayandar roads safe</p>
+                        </div>
+                        <button onclick="Navigation.closeReportModal()" class="text-slate-500 hover:text-white transition-colors p-1.5 rounded-[6px] hover:bg-white/5"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                    <!-- Form body -->
+                    <div class="px-5 py-4 space-y-4 overflow-y-auto" style="max-height:calc(100vh - 200px);">
+                        <div>
+                            <label class="block section-label mb-2">Issue Type</label>
+                            <div class="grid grid-cols-4 gap-2" id="modal-issue-types"></div>
+                        </div>
+                        <div>
+                            <label class="block section-label mb-1.5"><i data-lucide="map-pin" class="w-3 h-3 inline mr-1" style="color:var(--neon-cyan);"></i>Zone / Area</label>
+                            <select id="report-zone" class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium pr-8" style="border-color:rgba(34,211,238,0.4) !important;">
+                                <option value="">-- Select a zone --</option>
+                                <optgroup label="Transport Hubs">
+                                    <option>Mira Road Station</option>
+                                    <option>Bhayandar Station</option>
+                                    <option>Kashimira Junction</option>
+                                    <option>Bhayandar Flyover</option>
+                                </optgroup>
+                                <optgroup label="Markets and Commercial">
+                                    <option>Golden Nest Junction</option>
+                                    <option>Maxus Mall and Surroundings</option>
+                                    <option>Kanakia Road</option>
+                                    <option>Beverly Park Junction</option>
+                                    <option>Shanti Nagar Sector 4</option>
+                                    <option>Shanti Park</option>
+                                </optgroup>
+                                <optgroup label="Education">
+                                    <option>LR Tiwari Engineering College</option>
+                                    <option>Pillai College (Panvel Rd)</option>
+                                    <option>Smt. Indira Gandhi College</option>
+                                    <option>Vibgyor High School</option>
+                                    <option>DAV Public School</option>
+                                    <option>Ryan International School</option>
+                                </optgroup>
+                                <optgroup label="Corporate and IT">
+                                    <option>Reliance Corporate Park</option>
+                                    <option>TCS Olympus (IT Park)</option>
+                                    <option>Lodha Business District</option>
+                                </optgroup>
+                                <optgroup label="Metro Line 9 Stations">
+                                    <option>Dahisar East Metro Station</option>
+                                    <option>Miragaon Metro Station</option>
+                                    <option>Bhayander Metro Station</option>
+                                    <option>Bhayandar East Metro Station</option>
+                                    <option>Mira Road Metro Station</option>
+                                    <option>Kashimira Metro Station</option>
+                                </optgroup>
+                                <optgroup label="Roads and Highways">
+                                    <option>Western Express Highway (WEH)</option>
+                                    <option>Station Road</option>
+                                    <option>Kashimira Underpass</option>
+                                </optgroup>
+                                <option value="other">Other (specify below)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block section-label mb-1.5"><i data-lucide="building-2" class="w-3 h-3 inline mr-1" style="color:var(--neon-orange);"></i>Building / Society / Landmark</label>
+                            <input type="text" id="report-building" class="w-full rounded-[8px] text-[13px] py-3 md:py-2.5 px-3 font-medium" placeholder="e.g. Shree Sai Heights, Gate 2 or Near HDFC Bank">
+                        </div>
+
+                        <div>
+                            <label class="block section-label mb-1.5"><i data-lucide="align-left" class="w-3 h-3 inline mr-1" style="color:var(--neon-green);"></i>Detailed Description</label>
+                            <textarea id="report-description" class="w-full rounded-[8px] text-[13px] py-2.5 px-3 font-medium resize-none" rows="4" placeholder="Describe the problem clearly - What did you see? How severe? Any injuries or danger? Since when?"></textarea>
+                            <p class="text-[10px] mt-1" style="color:#334155;">More detail = faster resolution by authorities.</p>
+                        </div>
+                        <div>
+                            <label class="block section-label mb-1.5"><i data-lucide="image" class="w-3 h-3 inline mr-1" style="color:var(--neon-pink);"></i>Photo Evidence <span style="color:#475569;">(optional)</span></label>
+                            <div id="upload-zone" class="flex justify-center px-6 py-5 rounded-[8px] cursor-pointer" style="border:2px dashed rgba(255,255,255,0.1);background:rgba(255,255,255,0.02);" onclick="document.getElementById('report-photo').click()">
+                                <div class="text-center">
+                                    <i data-lucide="upload-cloud" class="w-8 h-8 mx-auto mb-2" style="color:#475569;"></i>
+                                    <p class="text-xs font-medium" style="color:#475569;"><span style="color:var(--neon-purple);">Tap to upload</span> or drag and drop</p>
+                                    <p class="text-[10px] mt-1" style="color:#334155;">PNG, JPG, GIF up to 10MB</p>
+                                </div>
+                            </div>
+                            <input id="report-photo" type="file" accept="image/*" class="hidden" onchange="ReportLogic.handlePhotoUpload(event)">
+                            <div id="image-preview-container" class="mt-2 hidden"></div>
+                        </div>
+                    </div>
+                    <!-- Action buttons -->
+                    <div class="px-5 py-4 flex flex-col sm:flex-row-reverse gap-2.5" style="border-top:1px solid rgba(255,255,255,0.08);">
+                        <button type="button" onclick="ReportLogic.submitReport()" class="btn-primary flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-3.5 sm:py-2.5 text-sm font-bold rounded-[8px]">
+                            <i data-lucide="send" class="w-4 h-4"></i> Submit Report
+                        </button>
+                        <button type="button" onclick="Navigation.closeReportModal()" class="flex-1 sm:flex-none inline-flex items-center justify-center px-5 py-3 sm:py-2.5 text-sm font-bold rounded-[8px] uppercase tracking-wider" style="background:rgba(255,255,255,0.04);border:1.5px solid var(--border-bright);color:#94a3b8;">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- /MAIN LAYOUT -->
+
+</div><!-- /#app-root -->
+
+    <!-- Starfield Animation -->
+    <script>
+    (function() {
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+
+        let W, H, stars, shooters, nebulaDust;
+
+        const STAR_COLORS = ['#ffffff','#c4b5fd','#93c5fd','#6ee7b7','#fde68a','#fbcfe8','#a5f3fc'];
+        const NEBULA_COLORS = [
+            'rgba(139,92,246,', 'rgba(34,211,238,',
+            'rgba(59,130,246,', 'rgba(74,222,128,',
+            'rgba(244,114,182,'
+        ];
+
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+            init();
+        }
+
+        function randBetween(a, b) { return a + Math.random() * (b - a); }
+        function pickColor(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+        function init() {
+            // Stars — mix of sizes and blink personalities
+            stars = Array.from({ length: 400 }, (_, i) => {
+                const big = i < 50;   // top 50 are big bright blinkers
+                const med = i < 160;  // next set medium
+                return {
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    r: big ? randBetween(1.6, 3.0) : med ? randBetween(0.9, 1.8) : randBetween(0.3, 1.0),
+                    color: pickColor(STAR_COLORS),
+                    baseAlpha: big ? randBetween(0.8, 1) : med ? randBetween(0.5, 0.9) : randBetween(0.25, 0.65),
+                    speed: big ? randBetween(0.035, 0.08) : randBetween(0.012, 0.032),
+                    phase: Math.random() * Math.PI * 2,
+                    drift: randBetween(-0.015, 0.015),
+                    blinkDeep: big || Math.random() < 0.4, // more stars blink dramatically
+                };
+            });
+
+            // Shooting stars pool
+            shooters = [];
+
+            // Nebula dust particles
+            nebulaDust = Array.from({ length: 55 }, () => ({
+                x: Math.random() * W,
+                y: Math.random() * H,
+                r: randBetween(60, 200),
+                color: pickColor(NEBULA_COLORS),
+                alpha: randBetween(0.018, 0.055),
+                speed: randBetween(0.00015, 0.0004),
+                angle: Math.random() * Math.PI * 2,
+            }));
+        }
+
+        function spawnShooter() {
+            const angle = randBetween(15, 50) * (Math.PI / 180); // diagonal downward
+            const speed = randBetween(6, 14);
+            shooters.push({
+                x: randBetween(0, W * 0.7),
+                y: randBetween(0, H * 0.4),
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                len: randBetween(80, 200),
+                alpha: 1,
+                color: pickColor(['#ffffff','#c4b5fd','#a5f3fc','#6ee7b7']),
+                life: 0,
+                maxLife: randBetween(28, 55),
+            });
+        }
+
+        let frame = 0;
+        let lastShoot = 0;
+        let shootInterval = randBetween(90, 220);
+
+        function draw(ts) {
+            ctx.clearRect(0, 0, W, H);
+
+            // Nebula dust
+            nebulaDust.forEach(d => {
+                d.angle += d.speed;
+                const ox = Math.cos(d.angle) * 30;
+                const oy = Math.sin(d.angle) * 20;
+                const grd = ctx.createRadialGradient(d.x + ox, d.y + oy, 0, d.x + ox, d.y + oy, d.r);
+                grd.addColorStop(0, d.color + d.alpha + ')');
+                grd.addColorStop(1, d.color + '0)');
+                ctx.beginPath();
+                ctx.arc(d.x + ox, d.y + oy, d.r, 0, Math.PI * 2);
+                ctx.fillStyle = grd;
+                ctx.fill();
+            });
+
+            // Stars
+            stars.forEach(s => {
+                s.phase += s.speed;
+                s.x += s.drift;
+                if (s.x > W + 2) s.x = -2;
+                if (s.x < -2)    s.x = W + 2;
+
+                // Dramatic blink: deep blinkers flash on/off, others pulse visibly
+                const raw = 0.5 + 0.5 * Math.sin(s.phase);
+                const twinkle = s.blinkDeep
+                    ? Math.pow(raw, 1.8)         // dramatic dip, flashes brightly
+                    : 0.45 + 0.55 * raw;         // visible pulse, noticeable shimmer
+
+                ctx.globalAlpha = s.baseAlpha * twinkle;
+                ctx.fillStyle = s.color;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Cross-sparkle + outer glow for bigger bright stars
+                if (s.r > 1.2 && twinkle > 0.6) {
+                    // Outer glow halo
+                    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4.5);
+                    glow.addColorStop(0, s.color + '55');
+                    glow.addColorStop(1, 'transparent');
+                    ctx.globalAlpha = s.baseAlpha * twinkle * 0.5;
+                    ctx.fillStyle = glow;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.r * 4.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Cross spike
+                    ctx.globalAlpha = s.baseAlpha * twinkle * 0.5;
+                    ctx.strokeStyle = s.color;
+                    ctx.lineWidth = 0.6;
+                    const sp = s.r * 4;
+                    ctx.beginPath();
+                    ctx.moveTo(s.x - sp, s.y); ctx.lineTo(s.x + sp, s.y);
+                    ctx.moveTo(s.x, s.y - sp); ctx.lineTo(s.x, s.y + sp);
+                    ctx.stroke();
+                }
+            });
+            ctx.globalAlpha = 1;
+
+            // Shooting stars
+            frame++;
+            if (frame - lastShoot > shootInterval) {
+                spawnShooter();
+                lastShoot = frame;
+                shootInterval = randBetween(90, 220);
+            }
+
+            shooters = shooters.filter(s => s.life < s.maxLife);
+            shooters.forEach(s => {
+                s.life++;
+                const progress = s.life / s.maxLife;
+                const fade = progress < 0.3 ? progress / 0.3 : 1 - (progress - 0.3) / 0.7;
+                ctx.globalAlpha = fade * 0.9;
+
+                const tailX = s.x - s.vx * (s.len / 12);
+                const tailY = s.y - s.vy * (s.len / 12);
+                const grad = ctx.createLinearGradient(tailX, tailY, s.x, s.y);
+                grad.addColorStop(0, 'transparent');
+                grad.addColorStop(1, s.color);
+
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(tailX, tailY);
+                ctx.lineTo(s.x, s.y);
+                ctx.stroke();
+
+                // Head glow
+                ctx.globalAlpha = fade * 0.7;
+                const hGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 4);
+                hGrad.addColorStop(0, s.color);
+                hGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = hGrad;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                s.x += s.vx;
+                s.y += s.vy;
+                ctx.globalAlpha = 1;
+            });
+
+            requestAnimationFrame(draw);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        requestAnimationFrame(draw);
+    })();
+    </script>
+
+    <!-- Scripts -->
+    <script src="public/js/mock_data.js"></script>
+    <script src="public/js/green_slot.js"></script>
+    <script src="public/js/map_enhanced.js"></script>
+    <script src="public/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+    </script>
+
+    <!-- ═══════════════════════════════
+         GREEN SLOT PREDICTOR MODAL
+    ═══════════════════════════════ -->
+    <div id="gs-detail-modal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 backdrop-blur-md transition-opacity" style="background:rgba(0,0,0,0.75);" onclick="GreenSlot.closeDetail()"></div>
+        <!-- Modal Content -->
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="neon-edge-modal relative transform overflow-hidden text-left transition-all sm:my-8 sm:w-full sm:max-w-md rounded-[16px]">
+                    <!-- Header -->
+                    <div class="px-4 py-3 flex items-center justify-between" style="border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);">
+                        <h3 class="font-heading font-black text-white flex items-center gap-2 text-[14px]">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i> AI Traffic Analysis
+                        </h3>
+                        <button type="button" onclick="GreenSlot.closeDetail()" class="text-slate-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <!-- Body (Injected by JS) -->
+                    <div id="gs-detail-body" class="p-5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
