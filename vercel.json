@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": null,
+  "outputDirectory": ".",
+  "framework": null,
+  "routes": [
+    { "src": "/app.js", "dest": "/app.js" },
+    { "src": "/green_slot.js", "dest": "/green_slot.js" },
+    { "src": "/map_enhanced.js", "dest": "/map_enhanced.js" },
+    { "src": "/mock_data.js", "dest": "/mock_data.js" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
